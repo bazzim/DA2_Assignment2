@@ -15,6 +15,15 @@ Population from year 2019 also included in this data set using the WDI package i
 ### Codes
 The codes folder includes the codes to get, clean and analyze the data.
 
+1. get_data.R
+Get the raw data for COVID-19 and population, and saves it to data/raw folder
+
+2. clean_data.R
+Clean both raw datasets, and merge the datasets based on country. Each observation is a country
+
+3. analysis_covid.R
+Analyze and compare different regression models. After selecting the best models, we compare residuals.
+
 ### Docs
 Contains both HTML and PDF generated using the R Markdown.
 
