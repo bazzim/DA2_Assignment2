@@ -5,6 +5,11 @@
 library(WDI)
 library(tidyverse)
 
+# Get data from clean folder
+
+df <- read.csv('data/clean/covid_clean.csv')
+
+
 # Analysis of the data ----------------------------------------------------
 
 ## Main Aim
