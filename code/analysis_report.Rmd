@@ -1,0 +1,464 @@
+---
+title: "COVID-19 Analysis Report"
+author: "Mariam Bazzi"
+output:
+  pdf_document: default
+  prettydoc::html_pretty:
+    theme: architect
+    highlight: github
+  html_document:
+    df_print: paged
+geometry: margin=1cm
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, 
+                      
+                      fig.height = 3, fig.width = 6, fig.align = "center") 
+```
+
+## Introduction
+The main aim of this analysis is find out if we can predict the number of deaths from COVID-19 by knowing the number of registered COVID-19 cases. To find out, we analyze the pattern of association between registered COVID-19 cases and registered number of deaths due to COVID-19.
+There are two variables: the explanatory variable is the total number of registered COVID-19 cases in a country, and the dependent variable which is the total number of registered deaths from COVID-19 in the same country.
+Our sample contains a nearly complete population data, except 6 territories: Diamond Princess, MS Zaandam, Western Sahara, Taiwan, Ertirea, and Holy See (Vatican). The cleaned dataset consists of 182 observations, where each observation represents a country, and 6 variables which are: Country, Confirmed, Deaths, Recovered, Active, and Population. The dataset makes sense for our analysis; it is a good to model the research question.
+
+## Data Analysis
+- Date to analyze: 17 September 2020. 
+- Explanatory variable: Number of registered cases. 
+- Dependent Variable: Number of registered deaths. 
+
+```{r include=FALSE}
+library(WDI)
+library(tidyverse)
+library(ggpubr)
+library(knitr)
+library(scales)
+
+# Get data from clean folder
+# Get data from clean folder
+df <- read.csv('/Users/mariam/Desktop/DA2_Assignment2/data/clean/covid_clean.csv')
+
+```
+
+#### Note
+Although the variables are skewed and have outliers, these outliers will not dropped as it may bias our estimates and results. We do not scale our variables as they have the same unit of measurement, the total number of deaths or cases per country.
+
+
+## Different Scatter-plots with Lowess
+```{r echo=FALSE}
+
+df<- df %>% mutate(log_confirmed = log(confirmed)) %>%
+  
+  mutate(log_death = log(death)) %>%
+  
+  mutate(log_death = ifelse(log_death== -Inf,0,log_death))
+
+# scatter plot of original variables
+p1<-ggplot(data = df, aes(x=confirmed, y = death))+ geom_point()+
+  
+  geom_smooth(method = "loess") + labs(title ="Death vs. \n Confirmed")+
+  
+  scale_x_continuous(labels = c(0,2,4,6), 
+                     
+                     breaks = seq(0,7000000,2000000))+
+  
+  xlab("Confirmed cases \n in millions")+
+  theme_classic()+
+  theme(plot.title = element_text(size = 8, face = "bold", hjust = 0.5),
+        
+        axis.title = element_text(size = 7, hjust = 0.5))
+
+# scatter plot of confirmed vs.log_death
+p2<-ggplot(data = df, aes(x=confirmed, y = log_death))+ geom_point()+
+  
+  geom_smooth(method = "loess") + labs(title ="Log Death vs. \n Confirmed")+
+  scale_x_continuous(labels = c(0,2,4,6), 
+                     
+                     breaks = seq(0,7000000,2000000))+
+  
+  xlab("Confirmed cases \n in millions")+
+  theme_classic()+
+  theme(plot.title = element_text(size = 8, face = "bold", hjust = 0.5),
+        
+        axis.title = element_text(size = 7, hjust = 0.5))
+
+# scatter plot of log_confirmed vs. death
+p3<-ggplot(data = df, aes(x= log_confirmed, y = death))+ geom_point()+
+  
+  geom_smooth(method = "loess") + labs(title ="Death vs. \n Log Confirmed")+
+  
+  xlab("Log confirmed")+
+  theme_classic()+
+  theme(plot.title = element_text(size = 8, face = "bold", hjust = 0.5),
+        
+        axis.title = element_text(size = 7, hjust = 0.5))
+
+# scatter plot of log_confirmed vs. log_death
+p4<-ggplot(data = df, aes(x= log_confirmed, y = log_death))+ geom_point()+
+  
+  geom_smooth(method = "loess") + labs(title ="Log Death vs. \n Log Confirmed")+ xlab("Log confirmed")+
+  theme_classic()+
+  theme(plot.title = element_text(size = 8, face = "bold", hjust = 0.5),
+        
+        axis.title = element_text(size = 7, hjust = 0.5))
+
+p<-ggarrange(p1,p2,p3,p4, ncol = 2, nrow = 2)
+
+p
+
+```
+
+When plotting the original variables, no clear correlation between the variables was observed. The log transformation can be used to disclose a relation between our variables. The best fitting line is for plotting the log_death vs the log_confirmed where most of data points do not deviate heavily from the fitted Lowess line. Also, the data points are equally distributed along the lowess line so this nearly linear relation can be modeled with our regression model.
+
+## Regression Models
+### i. Simple linear regression
+
+```{r echo=FALSE}
+
+mod_l <- lm(log_death ~ log_confirmed, data = df)
+
+## summary(mod_l)
+
+p1<-ggplot(df, aes(log_confirmed, log_death)) +
+  geom_point() +
+  stat_smooth(method = lm, formula = y ~ x)+
+  
+  labs(x="Log confirmed", y = "Log death")+
+  theme_classic()
+
+```
+
+### ii. Quadratic (linear) regression
+
+```{r echo=FALSE}
+# fit second order polynomial regression
+
+mod_q <- lm(log_death ~ poly(log_confirmed,2, raw = TRUE),data = df)
+
+## summary(mod_q)
+
+
+p2<-ggplot(df, aes(log_confirmed, log_death)) +
+  geom_point() +
+  stat_smooth(method = lm, formula = y ~ poly(x,2, raw = TRUE))+
+  
+  labs(x="Log confirmed", y = "Log death")+
+  theme_classic()
+
+```
+
+### iii. Piecewise linear spline regression
+
+```{r echo=FALSE}
+library(lspline)
+
+# 2 knots dividing range of log_conformed into 3 equal-width intervals
+
+mod_s <- lm(log_death ~ elspline(log_confirmed, 3), data = df)
+
+##summary(mod_s)
+
+p3<-ggplot(df, aes(log_confirmed, log_death)) +
+  geom_point() +
+  stat_smooth(method = lm, formula = y ~ elspline(x, 3))+
+  labs(x="Log confirmed", y = "Log death")+
+  theme_classic()
+
+```
+
+### iv. Weighted linear regression, using population as weights.
+
+```{r echo=FALSE}
+
+mod_w <- lm(log_death ~ log_confirmed,data = df, weights = population)
+
+##summary(mod_w)
+
+p4<-ggplot(df, aes(log_confirmed, log_death)) +
+  geom_point() +
+  stat_smooth(method = lm, aes(weight = population),formula = y ~ x)+
+  
+  labs(x="Log confirmed", y = "Log death")+
+  theme_classic()
+
+ggarrange(p1,p2,p3,p4, nrow = 2, ncol = 2, align = "hv", 
+          
+          labels = c("i","ii","iii","iv"))
+
+```
+
+## Chosen Regression Model
+
+```{r echo=FALSE}
+
+library(modelr)
+
+# modelr::rmse(mod_l,df)
+# 
+# modelr::rsquare(mod_l,df)
+# 
+# modelr::rmse(mod_q,df)
+# 
+# modelr::rsquare(mod_q,df)
+# 
+# modelr::rmse(mod_s,df)
+# 
+# modelr::rsquare(mod_s,df)
+# 
+# modelr::rmse(mod_w,df)
+# 
+# modelr::rsquare(mod_w,df)
+
+dat<- data.frame("model" = c("linear","quadratic","spline","weighted"),
+                 
+                 "R-squared" = c(rsquare(mod_l,df),rsquare(mod_q,df),
+                               
+                               rsquare(mod_s,df),rsquare(mod_w,df)),
+                 
+                 "root_mean_squared_error" = c(rmse(mod_l,df),rmse(mod_q,df),
+                                             
+                                             rmse(mod_s,df), rmse(mod_w,df)))
+
+dat %>% kable(align = "c", digits = 3, caption = "Comparing different \n regression models")
+
+## anova(mod_l,mod_w, mod_s, mod_q)
+
+```
+
+The best model is quadratic model with smallest root mean squared error and highest R-squared.
+This is also evident when using the ANOVA test to compare the models, where the quadratic model has the lowest residual sum of squares (RSS)(See Appendix). This is also evident from the graphical smoothing of this data. To get the formula, we add the argument, raw = TRUE, to get the coefficients of the original variables.
+
+## Formula
+
+$logdeath = -2.7 + 0.68(logconfirmed)+ 0.02(logconfirmed)^2$
+
+The interpretation of $\beta_1$ is for every 1% increase in the confirmed cases, the deaths will increase by 100*(1.01^0.68 -1)= 0.67%.
+For every 10% increase in the confirmed cases, the deaths will increase by 100*(1.1^0.68 -1)= 6.7%.
+For every 100% increase in the confirmed cases (doubling of cases), the deaths will increase by 100*(2^0.68 -1)= 60%.
+
+
+## Hypothesis Testing
+
+on $\beta_1$ (which interacts with x) 
+
+Test the following hypothesis: H0 : $\beta_1$ = 0; HA : $\beta_1 \neq 0$.
+Choose a significance level and make your conclusion.
+Our significance level is 0.05. We conclude that our sample indicates that $\beta_1$ is significantly larger than 0.
+
+```{r echo=FALSE}
+library(broom)
+
+tidy(mod_q) %>% kable(align = "c", digits = 4, caption = "summary of \n quadratic model")
+
+glance(mod_q)[,1:5] %>% kable(align = "c", digits = 4,
+                        
+                        caption = "summary of \n quadratic model fit")
+```
+
+The p-value of the total model is almost 0. This indicates that our model is significantly better than the null model.
+The r-squared is 0.90 or our models describes about 90% of the variability in the log deaths of COVID-19.
+
+
+## Analysis of the residuals
+
+```{r echo=FALSE}
+
+# plotting residuals vs fitted values
+ggplot()+geom_point(aes(x = mod_q$fitted.values, y = mod_q$residuals))+
+  
+  geom_hline(yintercept = 0)+
+  
+  labs(x = "Fitted values", y = "Residuals", 
+       title = "Residual errors vs. \n fitted values of quadratic model")+
+  theme_classic()+
+  theme(plot.title = element_text(size = 8, face = "bold", hjust = 0.5),
+        
+        axis.title = element_text(size = 7, hjust = 0.5))
+
+
+# largest countries with negative errors
+dat<- data.frame(country = df$country, residual = mod_q$residuals,
+                 
+                 fitted = mod_q$fitted.values, actual = df$log_death)
+
+# head(dat)
+
+dat %>% arrange(residual) %>% rownames_to_column(var = "row number")  %>%
+  
+  select(-`row number`) %>% 
+  
+  head(5) %>% kable(align = "c",
+                    
+                    caption = "Largest countries \n with negative errors")
+
+# largest countries with positive errors
+
+
+dat %>% arrange(desc(residual)) %>%
+  
+  rownames_to_column(var = "row number") %>%
+  
+  select(-`row number`) %>% 
+  
+  head(5) %>% kable(align = "c",
+                    
+                    caption = "Largest countries \n with positive errors")
+
+```
+
+The residual errors are almost equally dispersed around the horizontal line at zero with no patterns, which is good.
+We create a data frame that contains the fitted or predicted log_death and the residual of each country along with the country name and the actual log_death.
+residual = actual value - fitted value
+The largest countries with negative errors, meaning that our model overestimate their log_death value, Singapore, Qatar, Burundi, Mongolia, and Bahrain.
+The largest countries with positive errors, meaning that our model underestimate their log_death value, Yemen, Italy, Belgium, United Kingdom and Ecuador.
+
+## Results of the analysis
+The aim of this analysis was to predict the deaths from COVID-19 using confirmed cases of COVID-19. As both variables were heavily skewed, the variables were log transformed, and used the quadratic regression to predict the log deaths.
+Our model may get better if we included other variables in our model, for example, total tests carried, co-morbidity, hospital care received for cases, the age of patients. The inclusion of only 1 predictor certainly will weaken our model as it assumes that the relation between cases and deaths is the same in all countries regardless of underlying health and co-morbidity issues, national income effect, etc. 
+
+
+## Appendix
+
+### 1.Number of registered cases 
+The histogram below shows the number of registered cases without transforming the variables.
+The histogram for the number of registered COVID-19 cases is skewed with a long right tail. The quantile-quantile plot also shows the skewness.
+```{r, echo=FALSE}
+
+ p1<-ggplot(data = df, aes(x = confirmed))+ geom_histogram() + 
+  
+  ggtitle("Histogram and QQ plot\n 
+          of Registered COVID-19 Cases")+
+  
+  xlab("Cases")+
+  
+  theme_classic()+
+  theme(plot.title = element_text(size = 8, face = "bold", hjust = 0.5),
+        
+        axis.title = element_text(size = 7, hjust = 0.5))
+
+# quantile-quantile plot to check distribution
+p2<-ggqqplot(df$log_confirmed)+ theme(axis.title = element_text(size = 7, hjust = 0.5))
+
+ggarrange(p1,p2,nrow = 2)
+```
+
+#### 2.Number of registered deaths
+The summary statistics for the number of registered deaths are indicating right tailed distribution.
+This is shown in the histogram and the quantile-quantile plot of this variable.
+```{r, echo=FALSE}
+
+p1<-ggplot(data = df, aes(x = death))+ geom_histogram() + 
+  
+  ggtitle("Histogram and QQ plot\n 
+          of Registered COVID-19 Deaths")+
+  
+  xlab("Deaths")+
+  
+  theme_classic()+
+  theme(plot.title = element_text(size = 8, face = "bold", hjust = 0.5),
+        
+        axis.title = element_text(size = 7, hjust = 0.5))
+
+# quantile-quantile plot to check distribution
+p2<-ggqqplot(df$log_confirmed)+ 
+  
+  theme(axis.title = element_text(size = 7, hjust = 0.5))
+
+ggarrange(p1,p2,nrow = 2)
+
+```
+
+#### 3.Log Number of registered cases
+```{r, echo=FALSE}
+
+#summary(df$confirmed)
+
+# ggplot(data = df, aes(x = confirmed))+ geom_histogram() + 
+#      labs(title = "Number of Registered COVID-19 Cases" , x= "Number of Confirmed Cases")
+
+# quantile-quantile plot to check distribution
+#ggqqplot(df$confirmed) + labs("Quantile-quantile plot: Number of Registered COVID-19 Cases")
+
+# log transform
+
+
+p1<-ggplot(data = df, aes(x = log_confirmed))+ geom_histogram() + 
+  
+  ggtitle("Histogram and QQ plot\n 
+          of log transformed Registered COVID-19 Cases")+
+  
+  xlab("log cases")+
+  
+  theme_classic()+
+  theme(plot.title = element_text(size = 8, face = "bold", hjust = 0.5),
+        
+        axis.title = element_text(size = 7, hjust = 0.5))
+
+# quantile-quantile plot to check distribution
+p2<-ggqqplot(df$log_confirmed)+
+  theme(axis.title = element_text(size = 7, hjust = 0.5))
+
+ggarrange(p1,p2,nrow = 2)
+
+```
+The log transformed variable of confirmed cases is more normally distributed as shown by the histogram and quantile-quantile plot. Using the transformed variable is a better representation as the original variable were skewed with a long right tail. (See Appendix)
+
+
+
+#### 4.Log Number of registered deaths
+```{r echo=FALSE}
+
+p1<-ggplot(data = df, aes(x = log_death))+ geom_histogram() + 
+  
+  ggtitle("Histogram and QQ plot\n 
+          of log transformed Registered COVID-19 Deaths")+
+  
+  xlab("log deaths")+
+  
+  theme_classic()+
+  theme(plot.title = element_text(size = 8, face = "bold", hjust = 0.5),
+        
+        axis.title = element_text(size = 7, hjust = 0.5))
+
+# quantile-quantile plot to check distribution
+p2<-ggqqplot(df$log_confirmed)+
+  theme(axis.title = element_text(size = 7, hjust = 0.5))
+
+ggarrange(p1,p2,nrow = 2)
+
+```
+To make death variable more normally distributed, death was transformed log_death.
+The log transformed variable is more normally distributed as shown in the histogram and quantile-quantile plot.
+
+## Summary statistics of the variables
+
+Both the confirmed and death variables are skewed and not normally distributed. However, the log transformed variables are more normally distributed than the original variables.
+```{r echo=FALSE}
+
+library(knitr)
+
+df2<- df %>% select(confirmed, death, log_confirmed, log_death)
+
+dat<-sapply(df2,summary) %>% data.frame() %>% 
+  
+  rownames_to_column(var = "summary")
+
+
+dat2<-sapply(df2,sd) 
+
+dat %>% add_row(summary = "Standard deviation", confirmed = 674664.34,
+                
+                death = 19545.43, log_confirmed = 2.54,
+                
+                log_death = 2.77) %>%
+  
+  kable(align = "c", digits = 2, caption = "Summary statistics of \n COVID cases and deaths and their transformed variables")
+
+
+```
+
+### ANOVA Test
+```{r echo=FALSE}
+anova(mod_l,mod_w, mod_s, mod_q)
+```
+
